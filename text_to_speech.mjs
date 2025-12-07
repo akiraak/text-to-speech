@@ -38,7 +38,7 @@ const CONFIG = {
 // コマンドライン引数の解析
 let args = {};
 try {
-  const { values, positionals } = parseArgs({
+  const { values } = parseArgs({
     options: {
       voice: { type: "string" },
       speed: { type: "string" },
@@ -48,7 +48,7 @@ try {
       "debug-dir": { type: "string" },          // デバッグ用出力ディレクトリ
       parallel: { type: "string", short: "p" }, // 並列数
     },
-    allowPositionals: true,
+    allowPositionals: false, // 変更: ファイルパス指定を禁止
   });
 
   // outputは必須
@@ -57,7 +57,7 @@ try {
     process.exit(1);
   }
 
-  args = { ...values, input: positionals[0] }; // input は undefined の可能性あり
+  args = { ...values };
 
   if (values["debug-dir"]) {
     args.debugDir = values["debug-dir"];
@@ -91,7 +91,7 @@ function readStdin() {
 
     // パイプ入力がなく、かつTTY(人間が操作)の場合は案内を出す
     if (stdin.isTTY) {
-      console.error("入力ファイルが指定されていません。標準入力からテキストを待機します...");
+      console.error("入力テキストがありません。標準入力からテキストを待機します...");
       console.error("(入力を終了するには Ctrl+D を押してください)");
     }
 
@@ -192,12 +192,7 @@ class FileManager {
 }
 
 const TextProcessor = {
-  async readInput(filePath) {
-    if (!filePath) throw new Error("Input file path is required");
-    const text = await fs.promises.readFile(filePath, "utf-8");
-    if (!text.trim()) throw new Error("File content is empty");
-    return text;
-  },
+  // readInput を削除しました
 
   async splitText(text, config) {
     const splitter = new RecursiveCharacterTextSplitter({
@@ -234,8 +229,6 @@ const AudioProcessor = {
   },
 
   async mergeAndNormalize(inputFiles, outputPath, config) {
-    // 1つしかない場合は結合処理をスキップしてコピー＆正規化だけでも良いが
-    // 統一処理として無音付与を行う
     const silencePath = path.join(path.dirname(outputPath), "silence_padding.mp3");
     
     try {
@@ -251,7 +244,6 @@ const AudioProcessor = {
 
         const filterInput = filesToConcat.map((_, i) => `[${i}:0]`).join('');
         const norm = config.normalization;
-        // concat -> loudnorm
         const complexFilter = `${filterInput}concat=n=${filesToConcat.length}:v=0:a=1[cat];[cat]loudnorm=I=${norm.targetI}:TP=${norm.targetTP}:LRA=${norm.targetLRA}[out]`;
 
         command
@@ -286,15 +278,9 @@ async function main() {
     console.log(`出力先: ${outputFilePath}`);
     console.log(`設定: Model=${CONFIG.tts.model}, Voice=${CONFIG.tts.voice}, Speed=${CONFIG.tts.speed}`);
 
-    // 2. テキスト取得 (ファイル or 標準入力)
-    let rawText = "";
-    if (args.input) {
-      console.log(`入力ソース: ファイル (${args.input})`);
-      rawText = await TextProcessor.readInput(args.input);
-    } else {
-      console.log(`入力ソース: 標準入力 (パイプ)`);
-      rawText = await readStdin();
-    }
+    // 2. テキスト取得 (標準入力のみ)
+    console.log(`入力ソース: 標準入力 (パイプ)`);
+    const rawText = await readStdin();
 
     if (!rawText || !rawText.trim()) {
       console.error("エラー: テキストが空です。処理を中止します。");
@@ -316,7 +302,6 @@ async function main() {
         if (!partText) return;
 
         const seqNum = String(index + 1).padStart(3, '0');
-        // console.log(`[Chunk ${index + 1}] 生成中...`); // ログが多すぎる場合はコメントアウト
 
         const textFileName = `part_${seqNum}.txt`;
         await fileManager.saveText(textFileName, partText);
