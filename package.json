@@ -2,11 +2,10 @@
   "name": "text-to-speech",
   "version": "1.0.0",
   "description": "テキストから日本語の読み上げを生成します",
-  "main": "text_to_speech.mjs", 
-  "type": "module",
+  "main": "text_to_speech.js",
 
   "bin": {
-    "text-to-speech": "./text_to_speech.mjs"
+    "text-to-speech": "./text_to_speech.js"
   },
 
   "scripts": {
